@@ -1,465 +1,598 @@
 <!DOCTYPE html>
-<html lang="zh-TW" class="scroll-smooth">
+<html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FireReport.Pro - 火災原因調查報告書學習平台</title>
+    <title>基隆市消防局火災原因調查數位儀表板 | C25A31T1</title>
     
-    <!-- Tailwind CSS -->
+    <!-- External Libraries -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Phosphor Icons (替代 Lucide React) -->
-    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/lucide.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
 
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <!-- Configuration -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#fef2f2',
+                            100: '#fee2e2',
+                            500: '#ef4444', // Fire Red
+                            600: '#dc2626',
+                            800: '#991b1b',
+                            900: '#7f1d1d',
+                        },
+                        slate: {
+                            850: '#1e293b', // Darker slate for headers
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Noto Sans TC', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
 
     <style>
-        body {
-            font-family: 'Noto Sans TC', sans-serif;
-        }
-        
-        .fade-in-up {
-            animation: fadeInUp 0.5s ease-out forwards;
-        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Animation Classes */
+        .fade-in-up { animation: fadeInUp 0.5s ease-out forwards; opacity: 0; transform: translateY(10px); }
+        .delay-100 { animation-delay: 0.1s; }
+        .delay-200 { animation-delay: 0.2s; }
+        .delay-300 { animation-delay: 0.3s; }
 
         @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            to { opacity: 1; transform: translateY(0); }
         }
 
-        .step-btn.active {
-            background-color: #0f172a; /* slate-900 */
-            color: white;
-            border-color: #0f172a;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-            transform: scale(1.05);
+        /* Map Interactive Styles */
+        .room-cell {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .room-cell:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            z-index: 10;
+        }
+        .room-active {
+            ring: 2px solid #ef4444;
+            transform: scale(1.02);
+            z-index: 20;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
         }
 
-        .step-btn.active .icon-box {
-            background-color: #ea580c; /* orange-600 */
-            color: white;
-        }
-
-        .step-btn:not(.active):hover {
-            background-color: #f8fafc; /* slate-50 */
+        /* Chart Container Constraint */
+        .chart-wrapper {
+            position: relative;
+            height: 250px;
+            width: 100%;
         }
     </style>
 </head>
-<body class="min-h-screen bg-slate-50 text-slate-800">
+<body class="bg-slate-50 text-slate-800 font-sans antialiased flex flex-col min-h-screen">
 
     <!-- Navigation -->
-    <nav class="fixed w-full bg-slate-900 text-white z-50 shadow-lg">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16 items-center">
-                <!-- Logo -->
-                <div class="flex items-center space-x-2 cursor-pointer" onclick="window.scrollTo(0,0)">
-                    <div class="bg-orange-600 p-2 rounded-lg">
-                        <i class="ph ph-file-text text-xl"></i>
-                    </div>
-                    <span class="font-bold text-xl tracking-wider">FireReport<span class="text-orange-500">.Pro</span></span>
+    <nav class="bg-slate-900 text-white shadow-xl sticky top-0 z-50 backdrop-blur-md bg-opacity-95">
+        <div class="container mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="bg-red-600 p-2 rounded-lg shadow-lg shadow-red-900/50">
+                    <i data-lucide="flame" class="w-5 h-5 text-white"></i>
                 </div>
-                
-                <!-- Desktop Menu -->
-                <div class="hidden md:flex space-x-8 items-center">
-                    <a href="#process" class="hover:text-orange-400 transition-colors">撰寫流程</a>
-                    <a href="#examples" class="hover:text-orange-400 transition-colors">實戰範例</a>
-                    <a href="#resources" class="hover:text-orange-400 transition-colors">詞彙庫</a>
-                    <button class="bg-orange-600 hover:bg-orange-700 px-4 py-2 rounded-md font-medium transition-colors shadow-lg shadow-orange-900/20">
-                        學員登入
-                    </button>
-                </div>
-
-                <!-- Mobile Menu Button -->
-                <div class="md:hidden">
-                    <button id="mobile-menu-btn" class="text-white focus:outline-none">
-                        <i class="ph ph-list text-2xl" id="menu-icon"></i>
-                    </button>
+                <div>
+                    <div class="text-[10px] text-slate-400 font-bold tracking-widest uppercase">基隆市消防局</div>
+                    <h1 class="text-lg font-bold leading-none">火災原因調查鑑定書</h1>
                 </div>
             </div>
-        </div>
-        
-        <!-- Mobile Menu Dropdown -->
-        <div id="mobile-menu" class="hidden md:hidden bg-slate-800 px-4 py-4 space-y-3 border-t border-slate-700">
-            <a href="#process" class="block py-2 text-gray-300 hover:text-white hover:bg-slate-700 rounded px-2">撰寫流程</a>
-            <a href="#examples" class="block py-2 text-gray-300 hover:text-white hover:bg-slate-700 rounded px-2">實戰範例</a>
-            <a href="#resources" class="block py-2 text-gray-300 hover:text-white hover:bg-slate-700 rounded px-2">詞彙庫</a>
-            <button class="w-full text-left py-2 text-orange-400 font-bold px-2 hover:bg-slate-700 rounded">學員登入</button>
+            <div class="text-right hidden sm:block">
+                <div class="text-xs text-slate-400">檔案編號</div>
+                <div class="font-mono font-bold text-amber-400">C25A31T1</div>
+            </div>
         </div>
     </nav>
 
-    <!-- Hero Section -->
-    <header class="relative pt-32 pb-20 lg:pt-48 lg:pb-32 bg-slate-900 overflow-hidden">
-        <!-- Abstract Background Elements -->
-        <div class="absolute top-0 left-0 w-full h-full overflow-hidden opacity-20 pointer-events-none">
-            <div class="absolute top-[-10%] right-[-5%] w-96 h-96 bg-orange-600 rounded-full blur-[100px]"></div>
-            <div class="absolute bottom-[-10%] left-[-10%] w-96 h-96 bg-blue-600 rounded-full blur-[100px]"></div>
-        </div>
+    <!-- Main Content -->
+    <main class="flex-grow container mx-auto px-4 py-8 space-y-8">
 
-        <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center lg:text-left flex flex-col lg:flex-row items-center">
-            <div class="lg:w-1/2 space-y-8 z-10">
-                <div class="inline-flex items-center px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-orange-400 text-sm font-medium mb-4">
-                    <span class="w-2 h-2 bg-orange-500 rounded-full mr-2 animate-pulse"></span>
-                    最新課程：電氣火災熔痕判讀專題
+        <!-- Executive Summary Cards -->
+        <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 fade-in-up">
+            <!-- Time -->
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-start gap-4">
+                <div class="bg-blue-50 p-3 rounded-lg text-blue-600">
+                    <i data-lucide="clock" class="w-6 h-6"></i>
                 </div>
-                <h1 class="text-4xl lg:text-6xl font-extrabold text-white leading-tight">
-                    將現場的<span class="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-red-500">灰燼</span> <br />
-                    轉化為法庭上的<span class="text-blue-400">鐵證</span>
-                </h1>
-                <p class="text-lg text-slate-300 max-w-2xl mx-auto lg:mx-0">
-                    專為火災調查人員設計的報告書撰寫學習平台。從現場跡證採集到邏輯演繹，系統化掌握撰寫「火災原因調查報告書」的標準作業程序 (SOP)。
-                </p>
-                <div class="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-                    <button onclick="document.getElementById('process').scrollIntoView()" class="px-8 py-4 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-bold text-lg shadow-lg shadow-orange-900/20 transition-all transform hover:-translate-y-1 flex items-center justify-center group">
-                        開始學習流程
-                        <i class="ph ph-caret-right ml-2 text-xl group-hover:translate-x-1 transition-transform"></i>
-                    </button>
-                    <button class="px-8 py-4 bg-transparent border border-slate-600 text-white hover:bg-slate-800 rounded-lg font-bold text-lg transition-colors flex items-center justify-center">
-                        下載標準範本
-                        <i class="ph ph-download-simple ml-2 text-xl"></i>
-                    </button>
-                </div>
-                
-                <div class="pt-8 flex flex-wrap justify-center lg:justify-start gap-4 lg:gap-8 text-slate-400 text-sm">
-                    <div class="flex items-center">
-                        <i class="ph-fill ph-check-circle text-green-500 mr-2 text-lg"></i>
-                        符合 NFPA 921 指引
-                    </div>
-                    <div class="flex items-center">
-                        <i class="ph-fill ph-check-circle text-green-500 mr-2 text-lg"></i>
-                        消防機關格式通用
-                    </div>
+                <div>
+                    <p class="text-xs text-slate-500 font-bold uppercase">報案時間</p>
+                    <p class="text-slate-800 font-bold text-lg">114.01.31</p>
+                    <p class="text-slate-600 text-sm">19時31分</p>
                 </div>
             </div>
 
-            <!-- Right Content - Abstract Representation of a Report -->
-            <div class="lg:w-1/2 mt-16 lg:mt-0 relative z-10">
-                <div class="relative bg-white rounded-xl shadow-2xl p-6 md:p-8 transform rotate-2 hover:rotate-0 transition-transform duration-500 max-w-md mx-auto">
-                    <div class="flex items-center justify-between mb-6 border-b border-slate-100 pb-4">
-                        <div class="flex items-center space-x-3">
-                            <div class="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center">
-                                <i class="ph ph-scales text-slate-700 text-xl"></i>
-                            </div>
-                            <div>
-                                <h3 class="font-bold text-slate-900">火災原因調查報告書</h3>
-                                <p class="text-xs text-slate-500">案號：2025-FR-0082</p>
-                            </div>
-                        </div>
-                        <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full font-bold">已結案</span>
+            <!-- Location -->
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-start gap-4 md:col-span-2">
+                <div class="bg-slate-50 p-3 rounded-lg text-slate-600">
+                    <i data-lucide="map-pin" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <p class="text-xs text-slate-500 font-bold uppercase">火災地點</p>
+                    <p class="text-slate-800 font-bold text-lg leading-tight">基隆市七堵區百六街107巷15號5樓</p>
+                    <p class="text-slate-500 text-xs mt-1">15層 RC 構造集合住宅</p>
+                </div>
+            </div>
+
+            <!-- Cause -->
+            <div class="bg-white p-5 rounded-xl border-l-4 border-red-500 shadow-sm flex items-start gap-4">
+                <div class="bg-red-50 p-3 rounded-lg text-red-600">
+                    <i data-lucide="zap" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <p class="text-xs text-slate-500 font-bold uppercase">起火原因</p>
+                    <p class="text-red-700 font-bold text-lg">電氣因素</p>
+                    <p class="text-slate-500 text-xs">除濕機電源線短路</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Dashboard Split View -->
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- LEFT COLUMN: Interactive Map (7 cols) -->
+            <div class="lg:col-span-7 space-y-6 fade-in-up delay-100">
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="p-6 border-b border-slate-100 flex justify-between items-center">
+                        <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                            <i data-lucide="layout" class="w-5 h-5 text-slate-400"></i>
+                            現場平面勘察圖
+                        </h2>
+                        <span class="text-xs bg-slate-100 text-slate-500 px-3 py-1 rounded-full">互動式：請點擊區域</span>
                     </div>
                     
-                    <div class="space-y-4">
-                        <div class="h-4 bg-slate-100 rounded w-3/4"></div>
-                        <div class="h-4 bg-slate-100 rounded w-full"></div>
-                        <div class="h-4 bg-slate-100 rounded w-5/6"></div>
-                        
-                        <div class="p-4 bg-blue-50 border-l-4 border-blue-500 rounded-r my-4">
-                            <h4 class="font-bold text-blue-900 text-sm mb-1">研判結論 (Conclusion)</h4>
-                            <p class="text-xs text-blue-800 leading-relaxed text-justify">
-                                綜合現場燃燒路徑分析、電氣熔痕金相鑑驗結果，排除人為縱火與遺留火種之可能性，研判起火原因以電氣因素（電源線短路）引發火災之可能性較大。
-                            </p>
-                        </div>
-
-                        <div class="flex justify-between items-center pt-4 text-xs text-slate-400">
-                            <span>調查員：林調查</span>
-                            <span>日期：2025/12/16</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </header>
-
-    <!-- Process Section -->
-    <section id="process" class="py-20 bg-white">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="text-center mb-16">
-                <h2 class="text-3xl md:text-4xl font-bold text-slate-900 mb-4">標準化撰寫流程</h2>
-                <p class="text-slate-600 max-w-2xl mx-auto">
-                    報告書不是「寫」出來的，是透過科學調查「組裝」出來的。我們將調查過程拆解為五大核心模組。
-                </p>
-            </div>
-
-            <div class="grid lg:grid-cols-3 gap-8">
-                <!-- Step List (Generated by JS) -->
-                <div id="step-list" class="lg:col-span-1 space-y-4">
-                    <!-- Steps will be injected here -->
-                </div>
-
-                <!-- Step Detail Display -->
-                <div class="lg:col-span-2 bg-slate-50 rounded-2xl p-8 border border-slate-200 flex flex-col justify-center min-h-[300px]">
-                    <div id="step-content" class="fade-in-up">
-                        <div class="flex items-center space-x-4 mb-6">
-                            <div id="detail-icon-wrapper" class="p-3 bg-blue-100 text-blue-700 rounded-full">
-                                <!-- Icon -->
-                            </div>
-                            <h3 id="detail-title" class="text-2xl font-bold text-slate-900"></h3>
-                        </div>
-                        <p id="detail-desc" class="text-lg text-slate-700 mb-8 leading-relaxed"></p>
-                        <div class="bg-white p-6 rounded-xl border-l-4 border-orange-500 shadow-sm">
-                            <h4 class="font-bold text-slate-900 mb-2 flex items-center">
-                                <i class="ph ph-pen-nib text-orange-500 mr-2"></i>
-                                學習重點
-                            </h4>
-                            <p id="detail-highlight" class="text-slate-600"></p>
-                        </div>
-                        <div class="mt-8 flex justify-end">
-                            <button class="text-blue-600 font-bold hover:text-blue-800 flex items-center transition-colors">
-                                查看此章節詳細課程 <i class="ph ph-caret-right ml-1"></i>
+                    <div class="p-6 bg-slate-50 min-h-[400px] flex flex-col justify-center">
+                        <!-- Grid Map Implementation -->
+                        <div class="w-full max-w-2xl mx-auto aspect-[4/3] grid grid-cols-4 grid-rows-3 gap-3">
+                            
+                            <!-- Row 1 -->
+                            <button onclick="selectZone('balcony')" class="room-cell bg-green-50 border-2 border-green-200 rounded-xl flex flex-col items-center justify-center p-2 hover:bg-green-100">
+                                <span class="text-xl mb-1">🧺</span>
+                                <span class="text-xs font-bold text-slate-600">陽台</span>
                             </button>
+                            <button onclick="selectZone('kitchen')" class="room-cell bg-green-50 border-2 border-green-200 rounded-xl flex flex-col items-center justify-center p-2 hover:bg-green-100">
+                                <span class="text-xl mb-1">🍳</span>
+                                <span class="text-xs font-bold text-slate-600">廚房</span>
+                            </button>
+                            <!-- Fire Origin Room -->
+                            <button onclick="selectZone('bedroom3')" class="room-cell col-span-2 bg-red-50 border-2 border-red-500 rounded-xl flex flex-col items-center justify-center p-2 hover:bg-red-100 relative overflow-hidden group">
+                                <div class="absolute top-2 right-2 flex animate-pulse">
+                                    <i data-lucide="flame" class="w-4 h-4 text-red-600"></i>
+                                </div>
+                                <span class="text-2xl mb-1">🛏️</span>
+                                <span class="text-sm font-bold text-red-800">臥室 3 (起火處)</span>
+                                <span class="text-[10px] text-red-600 mt-1">嚴重碳化</span>
+                            </button>
+
+                            <!-- Row 2 -->
+                            <button onclick="selectZone('bath1')" class="room-cell bg-slate-100 border-2 border-slate-200 rounded-xl flex flex-col items-center justify-center p-2 hover:bg-slate-200">
+                                <span class="text-xl mb-1">🚽</span>
+                                <span class="text-xs font-bold text-slate-600">浴廁1</span>
+                            </button>
+                            <div class="flex items-center justify-center text-xs text-slate-400 font-mono tracking-widest">走道</div>
+                            <button onclick="selectZone('bath2')" class="room-cell bg-slate-200 border-2 border-slate-300 rounded-xl flex flex-col items-center justify-center p-2 hover:bg-slate-300">
+                                <span class="text-xl mb-1">🚿</span>
+                                <span class="text-xs font-bold text-slate-600">浴廁2</span>
+                            </button>
+                             <button onclick="selectZone('panel')" class="room-cell bg-amber-50 border-2 border-amber-400 rounded-xl flex flex-col items-center justify-center p-2 hover:bg-amber-100">
+                                <span class="text-xl mb-1">⚡</span>
+                                <span class="text-xs font-bold text-amber-800">配電盤</span>
+                            </button>
+
+                            <!-- Row 3 -->
+                            <button onclick="selectZone('bedroom1')" class="room-cell bg-slate-50 border-2 border-slate-200 rounded-xl flex flex-col items-center justify-center p-2 hover:bg-slate-100">
+                                <span class="text-xl mb-1">🛏️</span>
+                                <span class="text-xs font-bold text-slate-600">臥室 1</span>
+                            </button>
+                            <button onclick="selectZone('livingroom')" class="room-cell col-span-2 bg-slate-100 border-2 border-slate-300 rounded-xl flex flex-col items-center justify-center p-2 hover:bg-slate-200">
+                                <span class="text-2xl mb-1">🛋️</span>
+                                <span class="text-xs font-bold text-slate-600">客廳 (煙燻)</span>
+                            </button>
+                            <button onclick="selectZone('bedroom2')" class="room-cell bg-slate-50 border-2 border-slate-200 rounded-xl flex flex-col items-center justify-center p-2 hover:bg-slate-100">
+                                <span class="text-xl mb-1">🛏️</span>
+                                <span class="text-xs font-bold text-slate-600">臥室 2</span>
+                            </button>
+
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Timeline Panel -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                    <h3 class="text-sm font-bold text-slate-500 uppercase mb-4 flex items-center gap-2">
+                        <i data-lucide="activity" class="w-4 h-4"></i>
+                        事件時序記錄
+                    </h3>
+                    <div class="relative pl-4 border-l-2 border-slate-100 space-y-6">
+                        <div class="relative group">
+                            <div class="absolute -left-[23px] bg-red-500 h-4 w-4 rounded-full border-4 border-white shadow-sm group-hover:scale-110 transition-transform"></div>
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <span class="text-xs font-mono text-red-500 font-bold">19:31</span>
+                                    <h4 class="font-bold text-slate-800">接獲報案</h4>
+                                    <p class="text-sm text-slate-600 mt-1">住戶發現臥室起火，警衛協助通報。</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="relative group">
+                            <div class="absolute -left-[23px] bg-amber-500 h-4 w-4 rounded-full border-4 border-white shadow-sm group-hover:scale-110 transition-transform"></div>
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <span class="text-xs font-mono text-amber-500 font-bold">19:32</span>
+                                    <h4 class="font-bold text-slate-800">消防分隊出勤</h4>
+                                    <p class="text-sm text-slate-600 mt-1">百福分隊出動。</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="relative group">
+                            <div class="absolute -left-[23px] bg-blue-500 h-4 w-4 rounded-full border-4 border-white shadow-sm group-hover:scale-110 transition-transform"></div>
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <span class="text-xs font-mono text-blue-500 font-bold">19:34</span>
+                                    <h4 class="font-bold text-slate-800">抵達現場</h4>
+                                    <p class="text-sm text-slate-600 mt-1">住戶已自行使用滅火器撲滅明火。消防隊進行殘火處理與排煙。</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </section>
 
-    <!-- Comparison Section -->
-    <section id="examples" class="py-20 bg-slate-100">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="text-center mb-12">
-                <h2 class="text-3xl font-bold text-slate-900 mb-4">別讓文字漏洞成為法庭上的弱點</h2>
-                <p class="text-slate-600">學會用「證據說話」的專業筆法，告別主觀臆測。</p>
-            </div>
-
-            <div class="grid md:grid-cols-2 gap-8">
-                <!-- Example 1 -->
-                <div class="bg-white rounded-xl shadow-md overflow-hidden border border-slate-200 hover:shadow-lg transition-shadow">
-                    <div class="bg-slate-900 text-white p-4 font-bold flex justify-between items-center">
-                        <span>起火處描述</span>
-                        <i class="ph ph-book-open-text text-orange-500 text-xl"></i>
+            <!-- RIGHT COLUMN: Details & Analytics (5 cols) -->
+            <div class="lg:col-span-5 space-y-6 fade-in-up delay-200">
+                
+                <!-- Dynamic Detail Panel -->
+                <div id="detail-panel" class="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden relative min-h-[500px]">
+                    <!-- Placeholder State -->
+                    <div id="detail-placeholder" class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 bg-slate-50 p-8 text-center z-10">
+                        <div class="bg-white p-4 rounded-full shadow-sm mb-4">
+                            <i data-lucide="mouse-pointer-2" class="w-8 h-8 text-slate-300"></i>
+                        </div>
+                        <h3 class="text-lg font-bold text-slate-600">尚未選擇區域</h3>
+                        <p class="text-sm mt-2">請點擊左側平面圖中的房間<br>以檢視詳細勘察紀錄與受損數據</p>
                     </div>
-                    <div class="p-6 space-y-6">
-                        <!-- Bad -->
-                        <div class="relative pl-4 border-l-2 border-red-400">
-                            <div class="absolute -left-[9px] top-0 bg-red-100 text-red-600 rounded-full p-1 w-5 h-5 flex items-center justify-center">
-                                <i class="ph-bold ph-x text-xs"></i>
+
+                    <!-- Active Content State -->
+                    <div id="detail-content" class="hidden h-full flex flex-col">
+                        <!-- Header -->
+                        <div class="bg-slate-800 text-white p-6">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <span id="zone-status-badge" class="inline-block px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider bg-red-500 mb-2">起火處</span>
+                                    <h2 id="zone-title" class="text-2xl font-bold">臥室 3</h2>
+                                </div>
+                                <div id="zone-icon" class="text-4xl opacity-50">🛏️</div>
                             </div>
-                            <p class="text-xs text-red-500 font-bold mb-1">一般寫法 (NG)</p>
-                            <p class="text-slate-500 text-sm line-through decoration-slate-400">我覺得起火點應該是在沙發附近，因為那裡燒得很黑。</p>
                         </div>
-                        <!-- Good -->
-                        <div class="relative pl-4 border-l-2 border-green-500">
-                            <div class="absolute -left-[9px] top-0 bg-green-100 text-green-600 rounded-full p-1 w-5 h-5 flex items-center justify-center">
-                                <i class="ph-bold ph-check text-xs"></i>
+
+                        <!-- Scrollable Content -->
+                        <div class="flex-grow p-6 overflow-y-auto space-y-6">
+                            <!-- Description -->
+                            <div>
+                                <h4 class="text-xs font-bold text-slate-400 uppercase mb-2">勘察描述</h4>
+                                <p id="zone-desc" class="text-sm text-slate-700 leading-relaxed bg-slate-50 p-4 rounded-lg border border-slate-100">
+                                    載入中...
+                                </p>
                             </div>
-                            <p class="text-xs text-green-600 font-bold mb-1">專業寫法 (OK)</p>
-                            <p class="text-slate-800 font-medium text-sm leading-relaxed">勘察發現客廳沙發受燒碳化嚴重，呈現由下往上、由內向外之V字型燃燒痕跡，且天花板正上方有對應之熱白化現象，研判該處為起火處。</p>
-                        </div>
-                        <!-- Note -->
-                        <div class="bg-orange-50 p-3 rounded text-xs text-orange-800 flex items-start">
-                            <i class="ph-fill ph-warning-circle text-base mr-2 flex-shrink-0 mt-0.5"></i>
-                            避免主觀臆測（我覺得），改用具體燃燒痕跡（V字型、熱白化）佐證。
+
+                            <!-- Key Findings List -->
+                            <div id="findings-container">
+                                <h4 class="text-xs font-bold text-slate-400 uppercase mb-2">關鍵發現</h4>
+                                <ul id="zone-findings" class="space-y-2">
+                                    <!-- JS Populated -->
+                                </ul>
+                            </div>
+
+                            <!-- Chart -->
+                            <div class="pt-4 border-t border-slate-100">
+                                <h4 class="text-xs font-bold text-slate-400 uppercase mb-2">受損程度分析</h4>
+                                <div class="chart-wrapper">
+                                    <canvas id="damageChart"></canvas>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Example 2 -->
-                <div class="bg-white rounded-xl shadow-md overflow-hidden border border-slate-200 hover:shadow-lg transition-shadow">
-                    <div class="bg-slate-900 text-white p-4 font-bold flex justify-between items-center">
-                        <span>電氣因素排除</span>
-                        <i class="ph ph-book-open-text text-orange-500 text-xl"></i>
+                <!-- Evidence Card -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 fade-in-up delay-300">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-bold text-slate-800 flex items-center gap-2">
+                            <i data-lucide="microscope" class="w-5 h-5 text-amber-500"></i>
+                            證物鑑析：證物1號
+                        </h3>
+                        <span class="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded font-bold">關鍵證據</span>
                     </div>
-                    <div class="p-6 space-y-6">
-                        <!-- Bad -->
-                        <div class="relative pl-4 border-l-2 border-red-400">
-                            <div class="absolute -left-[9px] top-0 bg-red-100 text-red-600 rounded-full p-1 w-5 h-5 flex items-center justify-center">
-                                <i class="ph-bold ph-x text-xs"></i>
-                            </div>
-                            <p class="text-xs text-red-500 font-bold mb-1">一般寫法 (NG)</p>
-                            <p class="text-slate-500 text-sm line-through decoration-slate-400">電線看起來沒有短路，所以不是電線走火。</p>
+                    
+                    <div class="flex gap-4">
+                        <!-- CSS Visual of melted wire -->
+                        <div class="w-24 h-24 bg-slate-900 rounded-lg flex-shrink-0 relative overflow-hidden flex items-center justify-center border border-slate-700">
+                            <!-- Wire -->
+                            <div class="w-full h-1 bg-gray-500 absolute top-1/2 -translate-y-1/2"></div>
+                            <!-- Melt Mark (Bead) -->
+                            <div class="w-6 h-6 bg-amber-500 rounded-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 shadow-[0_0_10px_rgba(245,158,11,0.8)] border-2 border-slate-800 z-10"></div>
+                            <div class="text-[8px] text-white absolute bottom-1 right-1 font-mono">50x ZOOM</div>
                         </div>
-                        <!-- Good -->
-                        <div class="relative pl-4 border-l-2 border-green-500">
-                            <div class="absolute -left-[9px] top-0 bg-green-100 text-green-600 rounded-full p-1 w-5 h-5 flex items-center justify-center">
-                                <i class="ph-bold ph-check text-xs"></i>
+                        
+                        <div class="flex-grow">
+                            <h4 class="text-sm font-bold text-slate-700">除濕機電源線</h4>
+                            <p class="text-xs text-slate-500 mt-1 mb-2">採證位置：臥室3 插座處</p>
+                            <div class="text-xs bg-slate-50 p-2 rounded border border-slate-100 text-slate-600 leading-relaxed">
+                                <span class="font-bold text-red-600">鑑析結果：</span>
+                                熔痕外觀呈圓形局部熔解固化狀，與花線間有明顯界線，特徵吻合「通電中短路」熔痕。
                             </div>
-                            <p class="text-xs text-green-600 font-bold mb-1">專業寫法 (OK)</p>
-                            <p class="text-slate-800 font-medium text-sm leading-relaxed">經檢視該處配線，絕緣被覆雖受燒熔解，惟導體表面呈現平滑光澤，未發現短路熔痕特徵（一次痕或二次痕），故可排除電氣因素引發火災之可能性。</p>
-                        </div>
-                        <!-- Note -->
-                        <div class="bg-orange-50 p-3 rounded text-xs text-orange-800 flex items-start">
-                            <i class="ph-fill ph-warning-circle text-base mr-2 flex-shrink-0 mt-0.5"></i>
-                            需具體描述導體狀態（平滑光澤、無熔痕）作為排除依據。
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
-    </section>
 
-    <!-- Footer -->
-    <footer id="resources" class="bg-slate-900 text-slate-300 py-16">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="grid md:grid-cols-4 gap-8 mb-12 border-b border-slate-800 pb-12">
-                <div class="col-span-1 md:col-span-2">
-                    <div class="flex items-center space-x-2 mb-4">
-                        <div class="bg-orange-600 p-1.5 rounded">
-                            <i class="ph ph-file-text text-white text-lg"></i>
-                        </div>
-                        <span class="font-bold text-xl text-white tracking-wider">FireReport.Pro</span>
+            </div>
+        </section>
+
+        <!-- Deductive Logic Footer -->
+        <section class="mt-8 bg-white rounded-2xl shadow-sm border border-slate-200 p-8 fade-in-up delay-300">
+            <h2 class="text-xl font-bold text-slate-800 mb-6 text-center">起火原因綜合研判邏輯</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
+                <!-- Connector Line (Desktop) -->
+                <div class="hidden md:block absolute top-8 left-[16%] right-[16%] h-0.5 bg-slate-200 -z-10"></div>
+
+                <!-- Step 1 -->
+                <div class="text-center bg-white">
+                    <div class="w-16 h-16 mx-auto bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-4 shadow-sm border-4 border-white">
+                        <i data-lucide="shield-check" class="w-8 h-8"></i>
                     </div>
-                    <p class="text-sm max-w-sm mb-6 leading-relaxed">
-                        致力於提升火災調查報告品質的專業教育平台。結合科學鑑識與法律邏輯，協助調查員撰寫出經得起考驗的報告書。
+                    <h3 class="font-bold text-slate-800 mb-2">1. 排除人為與遺留火種</h3>
+                    <p class="text-sm text-slate-500 leading-relaxed">
+                        大門無破壞入侵痕跡，住戶自行滅火。<br>
+                        住戶無抽菸習慣，案發時無點燃香精或蚊香。
                     </p>
                 </div>
-                
-                <div>
-                    <h4 class="text-white font-bold mb-4">課程資源</h4>
-                    <ul class="space-y-2 text-sm">
-                        <li><a href="#" class="hover:text-orange-400 transition-colors">初階：報告書架構解析</a></li>
-                        <li><a href="#" class="hover:text-orange-400 transition-colors">進階：電氣火災專題</a></li>
-                        <li><a href="#" class="hover:text-orange-400 transition-colors">實戰：虛擬案件模擬</a></li>
-                    </ul>
+
+                <!-- Step 2 -->
+                <div class="text-center bg-white">
+                    <div class="w-16 h-16 mx-auto bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mb-4 shadow-sm border-4 border-white">
+                        <i data-lucide="search" class="w-8 h-8"></i>
+                    </div>
+                    <h3 class="font-bold text-slate-800 mb-2">2. 鎖定起火位置</h3>
+                    <p class="text-sm text-slate-500 leading-relaxed">
+                        火流跡證顯示由臥室3向外延燒。<br>
+                        除濕機位置碳化最嚴重，呈現U型火流圖案。
+                    </p>
                 </div>
 
-                <div>
-                    <h4 class="text-white font-bold mb-4">實用工具</h4>
-                    <ul class="space-y-2 text-sm">
-                        <li><a href="#" class="hover:text-orange-400 transition-colors">專業術語詞庫</a></li>
-                        <li><a href="#" class="hover:text-orange-400 transition-colors">標準報告書範本 (Word)</a></li>
-                        <li><a href="#" class="hover:text-orange-400 transition-colors">消防法規資料庫</a></li>
-                    </ul>
+                <!-- Step 3 -->
+                <div class="text-center bg-white">
+                    <div class="w-16 h-16 mx-auto bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4 shadow-sm border-4 border-white">
+                        <i data-lucide="zap" class="w-8 h-8"></i>
+                    </div>
+                    <h3 class="font-bold text-slate-800 mb-2">3. 確認電氣因素</h3>
+                    <p class="text-sm text-slate-500 leading-relaxed">
+                        配電盤無熔絲開關跳脫（案發時通電）。<br>
+                        電源線經顯微鏡檢視確認有短路熔痕。
+                    </p>
                 </div>
             </div>
-            
-            <div class="flex flex-col md:flex-row justify-between items-center text-sm">
-                <p>&copy; 2025 Fire Investigation Education Platform. All rights reserved.</p>
-                <div class="flex space-x-6 mt-4 md:mt-0">
-                    <a href="#" class="hover:text-white transition-colors">隱私權政策</a>
-                    <a href="#" class="hover:text-white transition-colors">使用條款</a>
-                    <a href="#" class="hover:text-white transition-colors">聯絡我們</a>
-                </div>
-            </div>
-        </div>
-    </footer>
+        </section>
 
-    <!-- JavaScript Logic -->
+        <!-- Footer -->
+        <footer class="mt-12 py-8 text-center text-slate-400 text-xs border-t border-slate-200">
+            <p class="mb-2">基隆市消防局火災調查科 | 承辦人：吳俊諺 | 審核：黃日谷</p>
+            <p>本數位儀表板內容僅供偵查參考，正式鑑定結果以書面報告為準。</p>
+        </footer>
+
+    </main>
+
+    <!-- Application Logic -->
     <script>
-        // Data for the process steps
-        const processSteps = [
-            {
-                id: 1,
-                title: "現場勘察與紀錄",
-                iconClass: "ph-magnifying-glass",
-                desc: "從外圍到起火處的「漏斗式」勘察，學習如何拍攝關鍵照片與繪製現場平面圖。",
-                highlight: "重點：燃燒路徑的連續性紀錄"
+        // Initialize Icons
+        lucide.createIcons();
+
+        // Data Store
+        const zoneData = {
+            'bedroom3': {
+                title: '臥室 3',
+                icon: '🔥',
+                status: '起火處 (嚴重受損)',
+                statusColor: 'bg-red-500 text-white',
+                desc: '房門內側及四周牆壁整面燻黑。床鋪東南側受燒碳化嚴重。冷氣機受燒垂落。除濕機整體金屬零件受燒往東側插座方向傾斜，底部機殼碳化。',
+                findings: [
+                    '插座處牆壁底部呈 U 型火流痕跡',
+                    '除濕機電源線發現熔斷痕跡 (證物1)',
+                    '電視背板熱熔但無短路痕跡',
+                    '冷氣內部線路無短路異常'
+                ],
+                chartData: [90, 10], // Damaged, Intact
+                chartColors: ['#ef4444', '#fee2e2']
             },
-            {
-                id: 2,
-                title: "排除法與假設",
-                iconClass: "ph-brain",
-                desc: "運用科學方法建立假設。學習如何在報告中邏輯嚴密地排除電氣、縱火、遺留火種等可能性。",
-                highlight: "重點：負面排除法的邏輯鏈"
+            'livingroom': {
+                title: '客廳',
+                icon: '🛋️',
+                status: '輕微煙燻',
+                statusColor: 'bg-slate-500 text-white',
+                desc: '神明桌及矮櫃無燃燒受損情形，僅牆壁上半部受煙燻黑。沙發、電視及餐桌椅等物品亦無燃燒受損。',
+                findings: [
+                    '受煙層蓄積影響導致燻黑',
+                    '無直接燃燒痕跡'
+                ],
+                chartData: [15, 85],
+                chartColors: ['#94a3b8', '#f1f5f9']
             },
-            {
-                id: 3,
-                title: "證物鑑驗分析",
-                iconClass: "ph-microscope",
-                desc: "如何解讀實驗室數據（GC-MS、金相分析），並將其轉化為報告中強有力的佐證。",
-                highlight: "重點：數據與現場狀況的關聯性"
+            'kitchen': {
+                title: '廚房',
+                icon: '🍳',
+                status: '未受燒',
+                statusColor: 'bg-green-500 text-white',
+                desc: '冰箱、櫥櫃、瓦斯爐具及電器櫃皆無燃燒受損情形。',
+                findings: [
+                    '火流未波及此處'
+                ],
+                chartData: [0, 100],
+                chartColors: ['#22c55e', '#f0fdf4']
             },
-            {
-                id: 4,
-                title: "綜合研判結論",
-                iconClass: "ph-scales",
-                desc: "將人證、物證與現場燃燒痕跡整合。學習撰寫無懈可擊的「起火原因研判」章節。",
-                highlight: "重點：證據權重的分配"
+            'balcony': {
+                title: '陽台',
+                icon: '🧺',
+                status: '未受燒',
+                statusColor: 'bg-green-500 text-white',
+                desc: '吊掛衣物、洗衣機等物品無燃燒受損情形。',
+                findings: ['火流未波及此處'],
+                chartData: [0, 100],
+                chartColors: ['#22c55e', '#f0fdf4']
             },
-            {
-                id: 5,
-                title: "報告書撰寫與修飾",
-                iconClass: "ph-file-text",
-                desc: "法律用語的精準化。避免模稜兩可的詞彙，確保報告書在法庭上的證據能力。",
-                highlight: "重點：客觀性與專業術語運用"
+            'bath1': {
+                title: '浴廁 1',
+                icon: '🚽',
+                status: '未受燒',
+                statusColor: 'bg-green-500 text-white',
+                desc: '內部衛浴設備無燃燒受損情形。',
+                findings: ['完整無損'],
+                chartData: [0, 100],
+                chartColors: ['#22c55e', '#f0fdf4']
+            },
+            'bath2': {
+                title: '浴廁 2',
+                icon: '🚿',
+                status: '煙燻/熱熔',
+                statusColor: 'bg-amber-500 text-white',
+                desc: '位於臥室3內。內部衛浴設備受煙燻黑，塑膠天花板因熱氣蓄積導致熱熔變形。',
+                findings: ['天花板熱熔垂落', '牆面燻黑'],
+                chartData: [40, 60],
+                chartColors: ['#f59e0b', '#fef3c7']
+            },
+            'bedroom1': {
+                title: '臥室 1',
+                icon: '🛏️',
+                status: '未受燒',
+                statusColor: 'bg-green-500 text-white',
+                desc: '房門及內部床鋪、棉被等物品無燃燒受損情形。',
+                findings: ['完整無損'],
+                chartData: [0, 100],
+                chartColors: ['#22c55e', '#f0fdf4']
+            },
+            'bedroom2': {
+                title: '臥室 2',
+                icon: '🛏️',
+                status: '未受燒',
+                statusColor: 'bg-green-500 text-white',
+                desc: '房門及內部床鋪、棉被等物品無燃燒受損情形。',
+                findings: ['完整無損'],
+                chartData: [0, 100],
+                chartColors: ['#22c55e', '#f0fdf4']
+            },
+            'panel': {
+                title: '配電盤',
+                icon: '⚡',
+                status: '跳電異常',
+                statusColor: 'bg-amber-600 text-white',
+                desc: '櫃體內燻黑，無燃燒受損。檢視無熔絲斷路器。',
+                findings: [
+                    '發現一處開關跳脫 (對應插座迴路)',
+                    '證明案發時為通電狀態'
+                ],
+                chartData: [10, 90],
+                chartColors: ['#d97706', '#fef3c7']
             }
-        ];
+        };
 
-        let activeStepIndex = 0;
+        let damageChart = null;
 
-        // Initialize
-        document.addEventListener('DOMContentLoaded', () => {
-            renderStepButtons();
-            updateStepContent(0);
-            setupMobileMenu();
-        });
+        function selectZone(zoneId) {
+            // 1. UI Selection Logic
+            document.querySelectorAll('.room-cell').forEach(el => {
+                el.classList.remove('room-active');
+            });
+            // Add active class to clicked button
+            event.currentTarget.classList.add('room-active');
 
-        // Setup Mobile Menu Toggle
-        function setupMobileMenu() {
-            const btn = document.getElementById('mobile-menu-btn');
-            const menu = document.getElementById('mobile-menu');
-            const icon = document.getElementById('menu-icon');
+            // 2. Hide Placeholder, Show Content
+            document.getElementById('detail-placeholder').classList.add('hidden');
+            document.getElementById('detail-content').classList.remove('hidden');
 
-            btn.addEventListener('click', () => {
-                menu.classList.toggle('hidden');
-                if (menu.classList.contains('hidden')) {
-                    icon.classList.remove('ph-x');
-                    icon.classList.add('ph-list');
-                } else {
-                    icon.classList.remove('ph-list');
-                    icon.classList.add('ph-x');
+            // 3. Populate Data
+            const data = zoneData[zoneId];
+            
+            // Header
+            document.getElementById('zone-title').textContent = data.title;
+            document.getElementById('zone-icon').textContent = data.icon;
+            
+            const badge = document.getElementById('zone-status-badge');
+            badge.textContent = data.status;
+            badge.className = `inline-block px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider mb-2 ${data.statusColor}`;
+
+            // Body
+            document.getElementById('zone-desc').textContent = data.desc;
+
+            // List
+            const list = document.getElementById('zone-findings');
+            list.innerHTML = '';
+            data.findings.forEach(item => {
+                const li = document.createElement('li');
+                li.className = 'flex items-start gap-2 text-sm text-slate-600';
+                li.innerHTML = `<span class="mt-1.5 w-1.5 h-1.5 rounded-full bg-slate-400 block flex-shrink-0"></span>${item}`;
+                list.appendChild(li);
+            });
+
+            // 4. Update Chart
+            updateChart(data.chartData, data.chartColors);
+        }
+
+        function updateChart(data, colors) {
+            const ctx = document.getElementById('damageChart').getContext('2d');
+            
+            if (damageChart) {
+                damageChart.destroy();
+            }
+
+            damageChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['受損/煙燻', '完好'],
+                    datasets: [{
+                        data: data,
+                        backgroundColor: colors,
+                        borderWidth: 0,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                font: { family: "'Noto Sans TC', sans-serif", size: 11 },
+                                boxWidth: 12,
+                                usePointStyle: true
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(30, 41, 59, 0.9)',
+                            padding: 12,
+                            titleFont: { family: "'Noto Sans TC', sans-serif" },
+                            bodyFont: { family: "'Noto Sans TC', sans-serif" }
+                        }
+                    },
+                    cutout: '75%',
+                    animation: {
+                        animateScale: true,
+                        animateRotate: true
+                    }
                 }
             });
-        }
-
-        // Render Step List Buttons
-        function renderStepButtons() {
-            const container = document.getElementById('step-list');
-            container.innerHTML = '';
-
-            processSteps.forEach((step, index) => {
-                const btn = document.createElement('button');
-                const isActive = index === activeStepIndex;
-                
-                btn.className = `step-btn w-full text-left p-4 rounded-xl transition-all duration-300 flex items-center space-x-4 border ${
-                    isActive 
-                        ? 'active' 
-                        : 'bg-white text-slate-600 border-slate-200'
-                }`;
-                
-                btn.onclick = () => {
-                    activeStepIndex = index;
-                    renderStepButtons(); // Re-render buttons to update styles
-                    updateStepContent(index);
-                };
-
-                btn.innerHTML = `
-                    <div class="icon-box p-2 rounded-lg transition-colors ${isActive ? '' : 'bg-slate-200 text-slate-500'}">
-                        <i class="ph ${step.iconClass} text-2xl"></i>
-                    </div>
-                    <div>
-                        <span class="text-xs font-bold uppercase tracking-wider opacity-70">Step 0${step.id}</span>
-                        <h3 class="font-bold">${step.title}</h3>
-                    </div>
-                `;
-                container.appendChild(btn);
-            });
-        }
-
-        // Update Content Area
-        function updateStepContent(index) {
-            const step = processSteps[index];
-            const contentContainer = document.getElementById('step-content');
-            
-            // Trigger animation
-            contentContainer.classList.remove('fade-in-up');
-            void contentContainer.offsetWidth; // Trigger reflow
-            contentContainer.classList.add('fade-in-up');
-
-            // Update Text
-            document.getElementById('detail-title').textContent = step.title;
-            document.getElementById('detail-desc').textContent = step.desc;
-            document.getElementById('detail-highlight').textContent = step.highlight;
-            
-            // Update Icon
-            const iconWrapper = document.getElementById('detail-icon-wrapper');
-            iconWrapper.innerHTML = `<i class="ph ${step.iconClass} text-2xl"></i>`;
         }
     </script>
 </body>
