@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>火災調查現場作業數位指南</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Custom styles for things Tailwind handles awkwardly */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 400px;
+        }
+        
+        /* Flowchart connector lines */
+        .flow-line {
+            position: absolute;
+            background-color: #a8a29e; /* stone-400 */
+            z-index: 0;
+        }
+        
+        .flow-node {
+            z-index: 10;
+            transition: all 0.3s ease;
+        }
+        
+        .flow-node:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        /* Custom scrollbar for better aesthetics */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f5f5f4; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #d6d3d1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a8a29e; 
+        }
+    </style>
+    <!-- Chosen Palette: Warm Neutrals (Stone/Zinc) with Professional Orange/Blue Accents. 
+         Background: Stone-50. Text: Stone-800. Accents: Orange-600 (Fire), Slate-600 (Structure). -->
+    <!-- Application Structure Plan: 
+         1. Dashboard Layout: A persistent sidebar navigation (tabs) representing the 5 phases of investigation + Overview.
+         2. Overview Tab: Interactive Flowchart visualizing the logic flow from the report.
+         3. Phase 1 (Arrival): Interactive Safety Assessment Tool. Users check off safety/prep items, updating a "Readiness/Safety" Doughnut chart.
+         4. Phase 2 & 3 (Exam & Origin): Combined into a "Scene Analysis" section. 
+            - Exterior/Interior toggle.
+            - "Hypothesis Elimination" tool: An interactive Bar Chart where users can "investigate" and "rule out" potential causes based on the "Process of Elimination" described in the report.
+         5. Phase 4 & 5 (Evidence & Analysis): "Case Conclusion" section. Evidence log simulation and a summary generator.
+         WHY: This structure transforms the linear text into a task-based workflow, allowing investigators to visualize the process and practice the logic of elimination and safety assessment. -->
+    <!-- Visualization & Content Choices:
+         1. Safety Gauge (Chart.js Doughnut): Visualizes the "Safety Assessment" section. Goal: Emphasize "Safety First". Interaction: Checkboxes update chart data.
+         2. Process Flow (HTML/CSS): Visualizes the "Process Flowchart". Goal: Provide a mental map. Interaction: Hover/Click to see details from text. No SVG/Mermaid.
+         3. Cause Probability (Chart.js Bar): Visualizes "Origin Determination -> Process of Elimination". Goal: Demonstrate scientific method. Interaction: Buttons to "Rule Out" causes, animating the chart.
+         4. Pattern Cards (CSS Shapes): Visualizes "V-Patterns" vs "Inverted Cone". Goal: Visual reference for "Interior Examination". Interaction: Hover for interpretation. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+</head>
+<body class="bg-stone-50 text-stone-800 font-sans antialiased min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm border-b border-stone-200 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-orange-600 rounded flex items-center justify-center text-white font-bold text-lg">F</div>
+                <h1 class="text-xl font-bold tracking-tight text-stone-900">火災調查現場作業數位指南 <span class="text-sm font-normal text-stone-500 ml-2">Fire Investigation Field Guide</span></h1>
+            </div>
+            <div class="text-sm text-stone-500 hidden md:block">
+                依據 SOP 標準作業程序
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Layout -->
+    <main class="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col md:flex-row gap-8">
+        
+        <!-- Sidebar Navigation -->
+        <nav class="md:w-64 flex-shrink-0 space-y-2">
+            <div class="bg-white rounded-lg shadow-sm border border-stone-200 p-4">
+                <p class="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">調查階段</p>
+                <button onclick="switchTab('overview')" id="nav-overview" class="nav-btn w-full text-left px-4 py-2 rounded-md text-sm font-medium transition-colors bg-orange-50 text-orange-700 border-l-4 border-orange-600">
+                    全案概覽 (Overview)
+                </button>
+                <button onclick="switchTab('phase1')" id="nav-phase1" class="nav-btn w-full text-left px-4 py-2 rounded-md text-sm font-medium text-stone-600 hover:bg-stone-50 hover:text-stone-900 transition-colors border-l-4 border-transparent">
+                    1. 到達與評估
+                </button>
+                <button onclick="switchTab('phase23')" id="nav-phase23" class="nav-btn w-full text-left px-4 py-2 rounded-md text-sm font-medium text-stone-600 hover:bg-stone-50 hover:text-stone-900 transition-colors border-l-4 border-transparent">
+                    2&3. 勘查與研判
+                </button>
+                <button onclick="switchTab('phase45')" id="nav-phase45" class="nav-btn w-full text-left px-4 py-2 rounded-md text-sm font-medium text-stone-600 hover:bg-stone-50 hover:text-stone-900 transition-colors border-l-4 border-transparent">
+                    4&5. 採證與分析
+                </button>
+            </div>
+            
+            <div class="bg-stone-100 rounded-lg p-4 mt-4 text-xs text-stone-500">
+                <p class="font-bold mb-1">核心原則：</p>
+                <ul class="list-disc pl-4 space-y-1">
+                    <li>安全第一</li>
+                    <li>科學驗證</li>
+                    <li>證據保全</li>
+                    <li>系統化分析</li>
+                </ul>
+            </div>
+        </nav>
+
+        <!-- Main Display Area -->
+        <div class="flex-1 min-w-0">
+            
+            <!-- OVERVIEW VIEW -->
+            <div id="view-overview" class="view-section space-y-6">
+                <div class="bg-white rounded-xl shadow-sm border border-stone-200 p-6">
+                    <h2 class="text-2xl font-bold text-stone-900 mb-2">標準作業流程圖</h2>
+                    <p class="text-stone-600 mb-6">
+                        本互動式流程圖概括了從接獲任務到最終結案的完整路徑。點擊下方節點可查看該步驟的關鍵重點。
+                        此流程確保調查具備邏輯性與證據力。
+                    </p>
+
+                    <!-- Interactive Flowchart Container -->
+                    <div class="relative bg-stone-50 rounded-lg p-8 border border-stone-200 min-h-[500px] overflow-x-auto">
+                        <div class="flex flex-col items-center space-y-8 min-w-[300px]">
+                            <!-- Nodes -->
+                            <div class="flow-node cursor-pointer bg-slate-700 text-white px-6 py-3 rounded-lg shadow w-64 text-center font-medium" onclick="showFlowDetail('start')">接獲任務與出勤</div>
+                            
+                            <div class="h-8 w-0.5 bg-stone-300"></div>
+                            
+                            <div class="flow-node cursor-pointer bg-white border-2 border-slate-600 text-slate-800 px-6 py-3 rounded-lg shadow w-64 text-center font-medium hover:bg-slate-50" onclick="showFlowDetail('arrival')">到達現場與初步評估</div>
+                            
+                            <div class="h-8 w-0.5 bg-stone-300"></div>
+                            
+                            <div class="relative">
+                                <div class="flow-node cursor-pointer bg-orange-100 border-2 border-orange-500 text-orange-900 px-6 py-3 rounded-lg shadow w-64 text-center font-bold" onclick="showFlowDetail('safety')">現場安全確認?</div>
+                                <!-- Branch lines -->
+                                <div class="absolute top-1/2 left-full w-8 h-0.5 bg-stone-300 -z-10"></div>
+                                <div class="absolute top-1/2 right-full w-8 h-0.5 bg-stone-300 -z-10"></div>
+                            </div>
+
+                            <div class="h-8 w-0.5 bg-stone-300"></div>
+                            
+                            <div class="grid grid-cols-2 gap-8 w-full max-w-2xl">
+                                <div class="flex flex-col items-center space-y-4">
+                                    <div class="flow-node cursor-pointer bg-white border border-stone-300 text-stone-700 px-4 py-2 rounded shadow w-48 text-center text-sm" onclick="showFlowDetail('exterior')">外部勘查</div>
+                                    <div class="h-4 w-0.5 bg-stone-300"></div>
+                                    <div class="flow-node cursor-pointer bg-white border border-stone-300 text-stone-700 px-4 py-2 rounded shadow w-48 text-center text-sm" onclick="showFlowDetail('interior')">內部勘查</div>
+                                </div>
+                                <div class="flex flex-col items-center space-y-4">
+                                    <div class="flow-node cursor-pointer bg-white border border-stone-300 text-stone-700 px-4 py-2 rounded shadow w-48 text-center text-sm" onclick="showFlowDetail('origin')">起火點研判 & 挖掘</div>
+                                    <div class="h-4 w-0.5 bg-stone-300"></div>
+                                    <div class="flow-node cursor-pointer bg-white border border-stone-300 text-stone-700 px-4 py-2 rounded shadow w-48 text-center text-sm" onclick="showFlowDetail('evidence')">證物採集 & 訪談</div>
+                                </div>
+                            </div>
+                            
+                            <div class="h-8 w-0.5 bg-stone-300"></div>
+
+                            <div class="flow-node cursor-pointer bg-slate-700 text-white px-6 py-3 rounded-lg shadow w-64 text-center font-medium" onclick="showFlowDetail('report')">綜合分析與撰寫報告</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Detail Box -->
+                    <div id="flow-detail-box" class="mt-6 p-4 bg-orange-50 rounded-lg border border-orange-100 text-sm text-stone-700 hidden">
+                        <h4 id="flow-detail-title" class="font-bold text-orange-800 mb-1"></h4>
+                        <p id="flow-detail-text"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PHASE 1 VIEW -->
+            <div id="view-phase1" class="view-section hidden space-y-6">
+                <div class="bg-white rounded-xl shadow-sm border border-stone-200 p-6">
+                    <h2 class="text-2xl font-bold text-stone-900 mb-2">第一階段：到達現場前與初步處置</h2>
+                    <p class="text-stone-600 mb-6">
+                        在踏入火場前，調查即已開始。此階段重點在於資訊蒐集與安全評估。
+                        請使用下方的互動檢核表確認您的準備狀態與現場安全指數。
+                    </p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <!-- Checklists -->
+                        <div class="space-y-6">
+                            <div class="bg-stone-50 p-4 rounded-lg border border-stone-200">
+                                <h3 class="font-bold text-lg mb-3 flex items-center">
+                                    <span class="w-6 h-6 bg-slate-600 text-white rounded-full flex items-center justify-center text-xs mr-2">1</span>
+                                    行前準備與裝備
+                                </h3>
+                                <div class="space-y-2">
+                                    <label class="flex items-center space-x-3 cursor-pointer">
+                                        <input type="checkbox" class="prep-check form-checkbox h-5 w-5 text-orange-600 rounded" onchange="updateSafetyChart()">
+                                        <span>確認個人防護裝備 (PPE)</span>
+                                    </label>
+                                    <label class="flex items-center space-x-3 cursor-pointer">
+                                        <input type="checkbox" class="prep-check form-checkbox h-5 w-5 text-orange-600 rounded" onchange="updateSafetyChart()">
+                                        <span>攜帶相機、光源、氣體偵測器</span>
+                                    </label>
+                                    <label class="flex items-center space-x-3 cursor-pointer">
+                                        <input type="checkbox" class="prep-check form-checkbox h-5 w-5 text-orange-600 rounded" onchange="updateSafetyChart()">
+                                        <span>採證工具箱齊全</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="bg-stone-50 p-4 rounded-lg border border-stone-200">
+                                <h3 class="font-bold text-lg mb-3 flex items-center">
+                                    <span class="w-6 h-6 bg-orange-600 text-white rounded-full flex items-center justify-center text-xs mr-2">2</span>
+                                    現場安全評估 (關鍵)
+                                </h3>
+                                <div class="space-y-2">
+                                    <label class="flex items-center space-x-3 cursor-pointer">
+                                        <input type="checkbox" class="safety-check form-checkbox h-5 w-5 text-orange-600 rounded" onchange="updateSafetyChart()">
+                                        <span>結構安全確認 (無倒塌風險)</span>
+                                    </label>
+                                    <label class="flex items-center space-x-3 cursor-pointer">
+                                        <input type="checkbox" class="safety-check form-checkbox h-5 w-5 text-orange-600 rounded" onchange="updateSafetyChart()">
+                                        <span>無有毒氣體/化學物質危害</span>
+                                    </label>
+                                    <label class="flex items-center space-x-3 cursor-pointer">
+                                        <input type="checkbox" class="safety-check form-checkbox h-5 w-5 text-orange-600 rounded" onchange="updateSafetyChart()">
+                                        <span>電源與瓦斯已切斷</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Safety Chart -->
+                        <div class="flex flex-col items-center justify-center bg-white p-4 rounded-lg border border-stone-100 shadow-sm">
+                            <h3 class="text-stone-500 font-medium mb-4">進場準備與安全指數</h3>
+                            <div class="chart-container">
+                                <canvas id="safetyChart"></canvas>
+                            </div>
+                            <p id="safety-status" class="mt-4 font-bold text-lg text-red-600">禁止進入 (0%)</p>
+                            <p class="text-xs text-stone-400 mt-2 text-center">需完成所有檢核項目方可開始勘查</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PHASE 2 & 3 VIEW -->
+            <div id="view-phase23" class="view-section hidden space-y-6">
+                <!-- Top Section: Examination Principles -->
+                <div class="bg-white rounded-xl shadow-sm border border-stone-200 p-6">
+                    <h2 class="text-2xl font-bold text-stone-900 mb-2">第二、三階段：現場勘查與起火點研判</h2>
+                    <p class="text-stone-600 mb-4">
+                        採用「由外而內」、「由輕微到嚴重」的順序。核心任務是鎖定起火戶、起火居室，並透過「排除法」確認起火原因。
+                    </p>
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+                        <!-- Pattern Visualizer -->
+                        <div class="bg-stone-50 p-5 rounded-lg border border-stone-200">
+                            <h3 class="font-bold text-stone-800 mb-3">火流跡象識別 (Fire Patterns)</h3>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="group cursor-help relative bg-white p-4 rounded shadow-sm text-center border hover:border-orange-400 transition-colors">
+                                    <div class="mx-auto w-0 h-0 border-l-[30px] border-l-transparent border-r-[30px] border-r-transparent border-t-[60px] border-t-stone-800 mb-2 transform rotate-180"></div>
+                                    <p class="font-bold text-sm">V型痕跡 (V-Pattern)</p>
+                                    <p class="text-xs text-stone-500 mt-1">火向上燃燒特性</p>
+                                    <!-- Tooltip -->
+                                    <div class="absolute opacity-0 group-hover:opacity-100 bottom-full left-0 w-full bg-stone-800 text-white text-xs p-2 rounded mb-2 z-10 pointer-events-none transition-opacity">
+                                        尖端通常指向起火源 (Point of Origin)
+                                    </div>
+                                </div>
+                                <div class="group cursor-help relative bg-white p-4 rounded shadow-sm text-center border hover:border-orange-400 transition-colors">
+                                    <div class="mx-auto w-0 h-0 border-l-[30px] border-l-transparent border-r-[30px] border-r-transparent border-t-[60px] border-t-stone-800 mb-2"></div>
+                                    <p class="font-bold text-sm">倒錐形痕跡</p>
+                                    <p class="text-xs text-stone-500 mt-1">Inverted Cone</p>
+                                    <div class="absolute opacity-0 group-hover:opacity-100 bottom-full left-0 w-full bg-stone-800 text-white text-xs p-2 rounded mb-2 z-10 pointer-events-none transition-opacity">
+                                        可能暗示使用助燃劑或地面起火
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Excavation Logic -->
+                        <div class="bg-stone-50 p-5 rounded-lg border border-stone-200">
+                            <h3 class="font-bold text-stone-800 mb-3">挖掘與復原原則</h3>
+                            <ul class="space-y-2 text-sm text-stone-700">
+                                <li class="flex items-start">
+                                    <span class="text-orange-600 mr-2">▶</span>
+                                    <span><strong>逐層清理：</strong>小心移除掉落物，切勿隨意翻攪。</span>
+                                </li>
+                                <li class="flex items-start">
+                                    <span class="text-orange-600 mr-2">▶</span>
+                                    <span><strong>復原現場：</strong>將倒塌家具盡可能擺回原位，還原空間配置。</span>
+                                </li>
+                                <li class="flex items-start">
+                                    <span class="text-orange-600 mr-2">▶</span>
+                                    <span><strong>最低燃燒點：</strong>尋找碳化最嚴重且位置最低處。</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Elimination Process Interactive Tool -->
+                <div class="bg-white rounded-xl shadow-sm border border-stone-200 p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-bold text-lg text-stone-900">起火原因研判：排除法實驗室 (Process of Elimination)</h3>
+                        <button onclick="resetElimination()" class="text-xs bg-stone-200 hover:bg-stone-300 px-3 py-1 rounded text-stone-700 transition-colors">重置實驗</button>
+                    </div>
+                    <p class="text-sm text-stone-500 mb-6">
+                        在起火點附近列出所有可能的熱源，逐一檢視並排除不可能的因素。
+                        <br>操作說明：點擊下方按鈕以「排除」該可能性，觀察圖表變化。留下的即為最可能原因。
+                    </p>
+
+                    <div class="flex flex-col md:flex-row gap-8">
+                        <!-- Controls -->
+                        <div class="md:w-1/3 space-y-3">
+                            <p class="text-xs font-bold text-stone-400 uppercase">潛在熱源列表</p>
+                            
+                            <button onclick="eliminateCause(0)" class="cause-btn w-full text-left px-4 py-3 bg-stone-50 hover:bg-red-50 border border-stone-200 rounded flex justify-between items-center group transition-all" id="btn-cause-0">
+                                <div>
+                                    <span class="font-bold block text-stone-800 group-hover:text-red-700">電氣因素</span>
+                                    <span class="text-xs text-stone-500">短路、過載、積污導電</span>
+                                </div>
+                                <span class="text-xs bg-white border border-stone-300 px-2 py-1 rounded group-hover:border-red-300">排除</span>
+                            </button>
+
+                            <button onclick="eliminateCause(1)" class="cause-btn w-full text-left px-4 py-3 bg-stone-50 hover:bg-red-50 border border-stone-200 rounded flex justify-between items-center group transition-all" id="btn-cause-1">
+                                <div>
+                                    <span class="font-bold block text-stone-800 group-hover:text-red-700">微小火源</span>
+                                    <span class="text-xs text-stone-500">菸蒂、線香、蚊香</span>
+                                </div>
+                                <span class="text-xs bg-white border border-stone-300 px-2 py-1 rounded group-hover:border-red-300">排除</span>
+                            </button>
+
+                            <button onclick="eliminateCause(2)" class="cause-btn w-full text-left px-4 py-3 bg-stone-50 hover:bg-red-50 border border-stone-200 rounded flex justify-between items-center group transition-all" id="btn-cause-2">
+                                <div>
+                                    <span class="font-bold block text-stone-800 group-hover:text-red-700">人為縱火</span>
+                                    <span class="text-xs text-stone-500">潑灑助燃劑、多處起火點</span>
+                                </div>
+                                <span class="text-xs bg-white border border-stone-300 px-2 py-1 rounded group-hover:border-red-300">排除</span>
+                            </button>
+
+                            <button onclick="eliminateCause(3)" class="cause-btn w-full text-left px-4 py-3 bg-stone-50 hover:bg-red-50 border border-stone-200 rounded flex justify-between items-center group transition-all" id="btn-cause-3">
+                                <div>
+                                    <span class="font-bold block text-stone-800 group-hover:text-red-700">機械因素</span>
+                                    <span class="text-xs text-stone-500">摩擦生熱、引擎過熱</span>
+                                </div>
+                                <span class="text-xs bg-white border border-stone-300 px-2 py-1 rounded group-hover:border-red-300">排除</span>
+                            </button>
+                        </div>
+
+                        <!-- Chart -->
+                        <div class="md:w-2/3">
+                            <div class="chart-container">
+                                <canvas id="eliminationChart"></canvas>
+                            </div>
+                            <div class="mt-2 p-3 bg-blue-50 text-blue-800 text-sm rounded border border-blue-100 text-center" id="conclusion-text">
+                                目前狀態：多種可能性並存，需進一步檢視證據。
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PHASE 4 & 5 VIEW -->
+            <div id="view-phase45" class="view-section hidden space-y-6">
+                <div class="bg-white rounded-xl shadow-sm border border-stone-200 p-6">
+                    <h2 class="text-2xl font-bold text-stone-900 mb-2">第四、五階段：證物與結案</h2>
+                    <p class="text-stone-600 mb-6">
+                        精確的採證與科學分析是報告的基石。建立完整的證物鍊 (Chain of Custody) 至關重要。
+                    </p>
+
+                    <!-- Evidence Collection Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                        <div class="bg-stone-50 p-4 rounded border border-stone-200 hover:shadow-md transition-shadow">
+                            <div class="text-orange-600 text-xl mb-2">⚡</div>
+                            <h4 class="font-bold">電氣證物</h4>
+                            <p class="text-xs text-stone-500 mt-1">採集疑似短路電線（熔痕）、插座殘骸。</p>
+                        </div>
+                        <div class="bg-stone-50 p-4 rounded border border-stone-200 hover:shadow-md transition-shadow">
+                            <div class="text-orange-600 text-xl mb-2">🧪</div>
+                            <h4 class="font-bold">助燃劑採樣</h4>
+                            <p class="text-xs text-stone-500 mt-1">起火點及地板接縫處碳化物，放入專用氣密罐。</p>
+                        </div>
+                        <div class="bg-stone-50 p-4 rounded border border-stone-200 hover:shadow-md transition-shadow">
+                            <div class="text-orange-600 text-xl mb-2">📷</div>
+                            <h4 class="font-bold">攝影記錄</h4>
+                            <p class="text-xs text-stone-500 mt-1">廣角全景、中景、特寫（需含比例尺與方位）。</p>
+                        </div>
+                    </div>
+
+                    <hr class="border-stone-100 my-6">
+
+                    <!-- Report Builder Simulation -->
+                    <h3 class="font-bold text-lg mb-4">火災原因調查摘要生成器</h3>
+                    <div class="bg-stone-50 p-6 rounded-lg border border-stone-200 space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-stone-500 mb-1">起火處 (Where)</label>
+                                <select id="report-where" class="w-full rounded border-stone-300 shadow-sm text-sm p-2">
+                                    <option>臥室床頭櫃附近</option>
+                                    <option>廚房瓦斯爐台</option>
+                                    <option>客廳沙發區域</option>
+                                    <option>工廠作業區機台</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-stone-500 mb-1">研判原因 (Why)</label>
+                                <select id="report-why" class="w-full rounded border-stone-300 shadow-sm text-sm p-2">
+                                    <option>電氣因素 (延長線短路)</option>
+                                    <option>微小火源 (遺留菸蒂)</option>
+                                    <option>爐火烹調不慎 (油鍋起火)</option>
+                                    <option>人為縱火 (發現助燃劑)</option>
+                                    <option>原因不明</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-xs font-bold text-stone-500 mb-1">佐證資料</label>
+                            <div class="flex gap-4">
+                                <label class="flex items-center space-x-2 text-sm">
+                                    <input type="checkbox" id="ev-vpattern" class="rounded text-orange-600"> <span>V型痕跡</span>
+                                </label>
+                                <label class="flex items-center space-x-2 text-sm">
+                                    <input type="checkbox" id="ev-melt" class="rounded text-orange-600"> <span>短路熔痕</span>
+                                </label>
+                                <label class="flex items-center space-x-2 text-sm">
+                                    <input type="checkbox" id="ev-video" class="rounded text-orange-600"> <span>監視器畫面</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <button onclick="generateReport()" class="bg-stone-800 text-white px-4 py-2 rounded text-sm hover:bg-stone-700 transition-colors w-full sm:w-auto">
+                            生成初步摘要
+                        </button>
+
+                        <div id="report-output" class="bg-white p-4 rounded border border-stone-200 text-sm font-mono text-stone-700 hidden">
+                            <!-- JS will populate this -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-stone-200 py-6 mt-8">
+        <div class="max-w-7xl mx-auto px-4 text-center text-stone-400 text-xs">
+            <p>© 2024 火災調查數位輔助系統 | 僅供培訓與參考使用</p>
+        </div>
+    </footer>
+
+    <script>
+        // --- State Management ---
+        const state = {
+            currentTab: 'overview',
+            safetyScore: 0,
+            eliminationData: [85, 40, 20, 30], // Initial fictitious probabilities
+            eliminationLabels: ['電氣因素', '微小火源', '人為縱火', '機械因素'],
+            eliminatedIndices: []
+        };
+
+        // --- Flowchart Data ---
+        const flowDetails = {
+            'start': { title: '接獲任務', text: '確認時間、地點、建築類型。檢查裝備(PPE、採證工具)。' },
+            'arrival': { title: '到達與觀察', text: '觀察火煙顏色、位置。注意天氣、阻礙物、逃生人員。' },
+            'safety': { title: '安全評估', text: '結構是否倒塌？有無毒氣(CO, HCN)？水電瓦斯是否切斷？' },
+            'exterior': { title: '外部勘查', text: '環繞建築一圈。觀察門窗開閉、煙燻痕跡、是否有遺留物。' },
+            'interior': { title: '內部勘查', text: '由受損輕微處向嚴重處推進。尋找V型痕跡、碳化深度。' },
+            'origin': { title: '起火點研判', text: '逐層清理挖掘。尋找最低燃燒點。利用排除法鎖定熱源。' },
+            'evidence': { title: '證物與訪談', text: '採集電線、碳化物。拍照存證。訪談目擊者與屋主。' },
+            'report': { title: '綜合分析', text: '運用火災動力學驗證。撰寫調查報告書(起火處、起火原因)。' }
+        };
+
+        // --- Chart Instances ---
+        let safetyChartInstance = null;
+        let eliminationChartInstance = null;
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initSafetyChart();
+            initEliminationChart();
+            switchTab('overview');
+        });
+
+        // --- Navigation Logic ---
+        function switchTab(tabId) {
+            // Hide all views
+            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+            // Show selected view
+            document.getElementById(`view-${tabId}`).classList.remove('hidden');
+            
+            // Update Tab Styles
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('bg-orange-50', 'text-orange-700', 'border-orange-600');
+                btn.classList.add('text-stone-600', 'border-transparent');
+            });
+            const activeBtn = document.getElementById(`nav-${tabId}`);
+            activeBtn.classList.add('bg-orange-50', 'text-orange-700', 'border-orange-600');
+            activeBtn.classList.remove('text-stone-600', 'border-transparent');
+            
+            state.currentTab = tabId;
+        }
+
+        // --- Flowchart Logic ---
+        function showFlowDetail(key) {
+            const data = flowDetails[key];
+            const box = document.getElementById('flow-detail-box');
+            const title = document.getElementById('flow-detail-title');
+            const text = document.getElementById('flow-detail-text');
+            
+            title.innerText = data.title;
+            text.innerText = data.text;
+            box.classList.remove('hidden');
+            box.classList.add('animate-pulse'); // visual feedback
+            setTimeout(() => box.classList.remove('animate-pulse'), 500);
+        }
+
+        // --- Phase 1: Safety Chart Logic ---
+        function initSafetyChart() {
+            const ctx = document.getElementById('safetyChart').getContext('2d');
+            safetyChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['已完成/安全', '未確認/風險'],
+                    datasets: [{
+                        data: [0, 100],
+                        backgroundColor: ['#ea580c', '#e7e5e4'], // orange-600, stone-200
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '75%',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { enabled: false }
+                    }
+                }
+            });
+        }
+
+        function updateSafetyChart() {
+            const totalChecks = document.querySelectorAll('.prep-check, .safety-check').length;
+            const checkedCount = document.querySelectorAll('.prep-check:checked, .safety-check:checked').length;
+            const percentage = Math.round((checkedCount / totalChecks) * 100);
+            
+            // Update Chart
+            safetyChartInstance.data.datasets[0].data = [percentage, 100 - percentage];
+            
+            // Color Logic: Green if 100%, Orange otherwise
+            if (percentage === 100) {
+                safetyChartInstance.data.datasets[0].backgroundColor = ['#16a34a', '#e7e5e4']; // Green
+                document.getElementById('safety-status').innerText = `允許進入 (${percentage}%)`;
+                document.getElementById('safety-status').className = "mt-4 font-bold text-lg text-green-600";
+            } else {
+                safetyChartInstance.data.datasets[0].backgroundColor = ['#ea580c', '#e7e5e4']; // Orange
+                document.getElementById('safety-status').innerText = `準備中 / 風險 (${percentage}%)`;
+                document.getElementById('safety-status').className = "mt-4 font-bold text-lg text-red-600";
+            }
+            
+            safetyChartInstance.update();
+        }
+
+        // --- Phase 3: Elimination Chart Logic ---
+        function initEliminationChart() {
+            const ctx = document.getElementById('eliminationChart').getContext('2d');
+            eliminationChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: state.eliminationLabels,
+                    datasets: [{
+                        label: '可能性強度 (模擬數據)',
+                        data: [...state.eliminationData],
+                        backgroundColor: '#78716c', // stone-500
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true, max: 100 }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        function eliminateCause(index) {
+            // Check if already eliminated
+            if (state.eliminatedIndices.includes(index)) return;
+
+            // Logic: Set value to 0
+            state.eliminatedIndices.push(index);
+            const newData = [...eliminationChartInstance.data.datasets[0].data];
+            newData[index] = 0;
+            eliminationChartInstance.data.datasets[0].data = newData;
+            
+            // Update UI Button
+            const btn = document.getElementById(`btn-cause-${index}`);
+            btn.classList.add('opacity-50', 'line-through');
+            btn.querySelector('span:last-child').innerText = "已排除";
+            btn.querySelector('span:last-child').classList.add('bg-red-100', 'text-red-700', 'border-red-200');
+
+            // Find remaining highest
+            let maxVal = 0;
+            let maxIndex = -1;
+            newData.forEach((val, i) => {
+                if (val > maxVal) {
+                    maxVal = val;
+                    maxIndex = i;
+                }
+            });
+
+            // Highlight the leading cause
+            const bgColors = newData.map((val, i) => i === maxIndex && val > 0 ? '#ea580c' : '#78716c');
+            eliminationChartInstance.data.datasets[0].backgroundColor = bgColors;
+
+            // Update Text
+            const conclusionDiv = document.getElementById('conclusion-text');
+            if (state.eliminatedIndices.length === state.eliminationLabels.length) {
+                conclusionDiv.innerText = "所有原因皆排除？請重新檢視現場證據或考慮「原因不明」。";
+                conclusionDiv.className = "mt-2 p-3 bg-red-50 text-red-800 text-sm rounded border border-red-100 text-center";
+            } else if (state.eliminatedIndices.length >= 2) {
+                conclusionDiv.innerText = `主要懷疑方向：${state.eliminationLabels[maxIndex]}`;
+                conclusionDiv.className = "mt-2 p-3 bg-green-50 text-green-800 text-sm rounded border border-green-100 text-center";
+            } else {
+                conclusionDiv.innerText = "持續利用物證排除不可能因素...";
+            }
+
+            eliminationChartInstance.update();
+        }
+
+        function resetElimination() {
+            state.eliminatedIndices = [];
+            eliminationChartInstance.data.datasets[0].data = [...state.eliminationData];
+            eliminationChartInstance.data.datasets[0].backgroundColor = '#78716c';
+            eliminationChartInstance.update();
+            
+            // Reset buttons
+            for(let i=0; i<4; i++) {
+                const btn = document.getElementById(`btn-cause-${i}`);
+                btn.classList.remove('opacity-50', 'line-through');
+                btn.querySelector('span:last-child').innerText = "排除";
+                btn.querySelector('span:last-child').classList.remove('bg-red-100', 'text-red-700', 'border-red-200');
+            }
+            document.getElementById('conclusion-text').innerText = "目前狀態：多種可能性並存，需進一步檢視證據。";
+            document.getElementById('conclusion-text').className = "mt-2 p-3 bg-blue-50 text-blue-800 text-sm rounded border border-blue-100 text-center";
+        }
+
+        // --- Phase 5: Report Logic ---
+        function generateReport() {
+            const where = document.getElementById('report-where').value;
+            const why = document.getElementById('report-why').value;
+            
+            let evidenceText = [];
+            if(document.getElementById('ev-vpattern').checked) evidenceText.push("牆面V型痕跡指向該處");
+            if(document.getElementById('ev-melt').checked) evidenceText.push("發現銅導線短路熔痕");
+            if(document.getElementById('ev-video').checked) evidenceText.push("調閱監視器畫面佐證");
+            
+            const evString = evidenceText.length > 0 ? `經勘查發現${evidenceText.join('、')}。` : "經勘查現場跡證綜合研判。";
+
+            const date = new Date().toLocaleDateString('zh-TW');
+
+            const report = `
+【火災原因調查初步摘要】
+日期：${date}
+
+1. 起火處 (Area of Origin)：
+   研判起火點位於${where}。
+
+2. 跡證分析：
+   ${evString}依據排除法，已排除其他非相關熱源。
+
+3. 研判結論 (Conclusion)：
+   起火原因研判以「${why}」之可能性較大。
+            `;
+            
+            const outputDiv = document.getElementById('report-output');
+            outputDiv.innerText = report.trim();
+            outputDiv.classList.remove('hidden');
+        }
+
+    </script>
+</body>
+</html>
